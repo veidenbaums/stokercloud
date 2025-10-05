@@ -7,7 +7,7 @@ from homeassistant.const import Platform
 from .const import DOMAIN
 from .api import StokerCloudWriteApi
 
-PLATFORMS: list[Platform] = [Platform.NUMBER]
+PLATFORMS: list[Platform] = [Platform.NUMBER, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
