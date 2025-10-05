@@ -1,26 +1,33 @@
 from __future__ import annotations
+
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
-from .const import DOMAIN, CONF_SERIAL, CONF_TOKEN
+from homeassistant.data_entry_flow import FlowResult
 
-DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_SERIAL): str,
-        vol.Required(CONF_TOKEN): str,
-    }
-)
+from .const import DOMAIN, CONF_SERIAL, CONF_TOKEN, CONF_NAME
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+
+class StokerCloudWriteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Майстер налаштування StokerCloud Write."""
+
     VERSION = 1
 
-    async def async_step_user(self, user_input=None):
+    async def async_step_user(self, user_input=None) -> FlowResult:
         if user_input is not None:
             serial = user_input[CONF_SERIAL]
+            # Уникати дубліката за серійним номером
             await self.async_set_unique_id(serial)
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
-                title=f"NBE {serial}",
+                title=user_input.get(CONF_NAME) or f"NBE {serial}",
                 data=user_input,
             )
-        return self.async_show_form(step_id="user", data_schema=DATA_SCHEMA)
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_SERIAL): str,
+                vol.Required(CONF_TOKEN): str,
+                vol.Optional(CONF_NAME, default=""): str,
+            }
+        )
+        return self.async_show_form(step_id="user", data_schema=schema)
