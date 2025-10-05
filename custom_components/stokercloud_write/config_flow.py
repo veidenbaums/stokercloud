@@ -1,43 +1,61 @@
 from __future__ import annotations
-
-import voluptuous as vol
-from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DOMAIN, CONF_SERIAL_NUMBER, CONF_TOKEN, CONF_PHPSESSID
 
-STEP_USER_DATA_SCHEMA = vol.Schema({
-    vol.Required(CONF_SERIAL_NUMBER): str,
-    vol.Required(CONF_TOKEN): str,
-    vol.Optional(CONF_PHPSESSID, default=""): str,
+from .const import DOMAIN, CONF_SERIAL, CONF_TOKEN, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+from .api import StokerApi
+
+
+class StokerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+VERSION = 1
+
+
+async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
+errors = {}
+if user_input is not None:
+serial = user_input[CONF_SERIAL].strip()
+token = user_input[CONF_TOKEN].strip()
+scan = user_input.get(CONF_SCAN_INTERVAL, int(DEFAULT_SCAN_INTERVAL.total_seconds()))
+
+
+api = StokerApi(serial=serial, token=token)
+ok, err = await api.async_validate()
+if ok:
+await self.async_set_unique_id(serial)
+self._abort_if_unique_id_configured()
+return self.async_create_entry(title=f"StokerCloud {serial}", data={
+CONF_SERIAL: serial,
+CONF_TOKEN: token,
+CONF_SCAN_INTERVAL: scan,
 })
+errors["base"] = "cannot_connect"
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for StokerCloud Write."""
 
-    VERSION = 1
+schema = vol.Schema({
+vol.Required(CONF_SERIAL): str,
+vol.Required(CONF_TOKEN): str,
+vol.Optional(CONF_SCAN_INTERVAL, default=int(DEFAULT_SCAN_INTERVAL.total_seconds())): int,
+})
+return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
-    async def async_step_user(self, user_input=None) -> FlowResult:
-        if user_input is None:
-            return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
-        serial = user_input[CONF_SERIAL_NUMBER].strip()
+@callback
+def async_get_options_flow(self, config_entry):
+return StokerOptionsFlow(config_entry)
 
-        # не дозволяємо дублікати за серійником
-        await self.async_set_unique_id(serial)
-        self._abort_if_unique_id_configured()
 
-        data = {
-            CONF_SERIAL_NUMBER: serial,
-            CONF_TOKEN: user_input[CONF_TOKEN].strip(),
-        }
-        phpsessid = user_input.get(CONF_PHPSESSID, "").strip()
-        if phpsessid:
-            data[CONF_PHPSESSID] = phpsessid
+class StokerOptionsFlow(config_entries.OptionsFlow):
+def __init__(self, entry: config_entries.ConfigEntry) -> None:
+self.entry = entry
 
-        return self.async_create_entry(title=f"StokerCloud ({serial})", data=data)
 
-    async def async_step_import(self, import_config):
-        """Якщо колись додавали через YAML — можна імпортувати (опційно)."""
-        return await self.async_step_user(import_config)
+async def async_step_init(self, user_input=None):
+if user_input is not None:
+return self.async_create_entry(title="", data=user_input)
+
+
+schema = vol.Schema({
+vol.Optional(CONF_SCAN_INTERVAL, default=self.entry.data.get(CONF_SCAN_INTERVAL, int(DEFAULT_SCAN_INTERVAL.total_seconds()))): int,
+})
+return self.async_show_form(step_id="init", data_schema=schema)
