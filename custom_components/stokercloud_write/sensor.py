@@ -1,61 +1,68 @@
 from __future__ import annotations
-from dataclasses import dataclass
 
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SENSOR_DEFINITIONS
+def _include_key(key: str) -> bool:
+if key in SENSOR_EXCLUDE_EXACT:
+return False
+if any(key.startswith(p) for p in SENSOR_EXCLUDE_PREFIXES):
+return False
+# пропустимо явно керовану нами "boiler.temp" як сенсор? — ні, залишимо й сенсор і number
+return True
 
-@dataclass
-class NbeSensorDescription:
-    key: str
-    name: str
-    device_class: str | None
-    unit: str | None
-    state_class: str | None
-    icon: str | None
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
 
-    entities: list[NbeSensor] = []
-    for d in SENSOR_DEFINITIONS:
-        desc = NbeSensorDescription(**d)
-        entities.append(NbeSensor(coordinator, entry, desc))
-    async_add_entities(entities)
 
-class NbeSensor(CoordinatorEntity, SensorEntity):
-    _attr_has_entity_name = True
+def _pretty_name(key: str) -> str:
+parts = key.split(".")
+parts = [p.replace("_", " ").capitalize() for p in parts]
+return " / ".join(parts)
 
-    def __init__(self, coordinator, entry: ConfigEntry, desc: NbeSensorDescription):
-        super().__init__(coordinator)
-        self._entry = entry
-        self.entity_id = None
-        self._desc = desc
-        self._attr_name = desc.name
-        self._attr_unique_id = f"{entry.entry_id}_{desc.key}"
-        if desc.device_class:
-            self._attr_device_class = getattr(SensorDeviceClass, desc.device_class, None)
-        if desc.state_class:
-            self._attr_state_class = getattr(SensorStateClass, desc.state_class, None)
-        self._attr_native_unit_of_measurement = desc.unit
-        if desc.icon:
-            self._attr_icon = desc.icon
 
-    @property
-    def native_value(self):
-        return self.coordinator.data.get(self._desc.key)
 
-    @property
-    def device_info(self):
-        # Обов'язково те саме, що й у твоєму number entity
-        return {
-            "identifiers": {(DOMAIN, self._entry.data["serial"])},
-            "manufacturer": "NBE / StokerCloud",
-            "name": f"StokerCloud {self._entry.data['serial']}",
-            "model": "Bio/Scotte",
-        }
+
+def _guess_unit_and_class(key: str, value: Any):
+k = key.lower()
+text = k.split(".")[-1]
+
+
+if any(s in text for s in ("temp", "temperature")):
+return (TEMP_CELSIUS, SensorDeviceClass.TEMPERATURE)
+if any(s in text for s in ("pressure",)):
+return (UnitOfPressure.BAR, SensorDeviceClass.PRESSURE)
+if any(s in text for s in ("power",)):
+return (UnitOfPower.KILO_WATT, SensorDeviceClass.POWER)
+if any(s in text for s in ("energy", "kwh")):
+return (UnitOfEnergy.KILO_WATT_HOUR, SensorDeviceClass.ENERGY)
+if any(s in text for s in ("pct", "percent", "%")):
+return (PERCENTAGE, None)
+if re.search(r"rpm$", text):
+return (REVOLUTIONS_PER_MINUTE, None)
+
+
+return (None, None)
+
+
+
+
+class StokerDynamicSensor(CoordinatorEntity[StokerCoordinator], SensorEntity):
+_attr_has_entity_name = True
+
+
+def __init__(self, coordinator: StokerCoordinator, entry_id: str, key: str, name: str, unit, device_class) -> None:
+super().__init__(coordinator)
+self._key = key
+self._attr_unique_id = f"{entry_id}_{key}"
+self._attr_name = name
+self._attr_native_unit_of_measurement = unit
+self._attr_device_class = device_class
+self._attr_device_info = {
+"identifiers": {(DOMAIN, entry_id)},
+"manufacturer": DEVICE_MANUFACTURER,
+"model": DEVICE_MODEL,
+"name": f"StokerCloud {coordinator.entry.data.get('serial')}",
+}
+
+
+@property
+def native_value(self):
+return self.coordinator.data.get(self._key)
