@@ -1,21 +1,41 @@
 from __future__ import annotations
 
+
+from datetime import timedelta
+
+
 DOMAIN = "stokercloud_write"
+PLATFORMS: list[str] = ["sensor", "number"]
+DEFAULT_SCAN_INTERVAL = timedelta(seconds=30)
 
-# поля конфігу
-CONF_SERIAL_NUMBER = "serial_number"
+
+CONF_SERIAL = "serial"
 CONF_TOKEN = "token"
-CONF_PHPSESSID = "phpsessid"
+CONF_SCAN_INTERVAL = "scan_interval"
 
-# сервіс (низькорівневий)
-ATTR_MENU = "menu"
-ATTR_NAME = "name"
-ATTR_VALUE = "value"
-ATTR_PHPSESSID = "phpsessid"
-ATTR_ENTRY_ID = "entry_id"  # якщо треба вказати конкретний пристрій/енрі
 
-# дефолтні ключі для керування котловою температурою
-DEFAULT_TEMP_MENU = "boiler.temp"
-DEFAULT_TEMP_NAME = "boiler.temp"
+API_BASE = "https://stokercloud.dk"
+API_DATA_PATH = "/v2/dataout2/data.json" # читання
+API_WRITE_PATH = "/v2/dataout2/updatevalue.php" # запис
 
-PLATFORMS: list[str] = ["number"]
+
+DEVICE_MANUFACTURER = "NBE"
+DEVICE_MODEL = "StokerCloud"
+
+
+# Ключі, які краще не піднімати як сенсори (службові або дублікати)
+SENSOR_EXCLUDE_PREFIXES = ("time_", "timestamp_", "history_")
+SENSOR_EXCLUDE_EXACT = {"status", "ok", "error"}
+
+
+# Евристики одиниць
+UNIT_MAP_SUFFIX = {
+"temp": "°C",
+"temperature": "°C",
+"pressure": "bar",
+"power": "kW",
+"energy": "kWh",
+"pct": "%",
+"%": "%",
+"rpm": "rpm",
+}
