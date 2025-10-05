@@ -3,7 +3,7 @@ import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 
 # Не міняємо твій домен — лишаємо як є
-DOMAIN = "hass_stokercloud"
+DOMAIN = "stokercloud_write"
 
 # Додаємо поля під запис (token + опціонально phpsessid)
 CONF_TOKEN = "token"
