@@ -33,7 +33,7 @@ class StokerCloudBoilerSetpointNumber(NumberEntity):
         self._client = client
         self._menu = DEFAULT_TEMP_MENU
         self._name_key = DEFAULT_TEMP_NAME
-        self._state: Optional[float] = None
+        self._state: 60
         # unique_id не обов’язковий у YAML-платформі, але можна задати стабільний
         self._attr_unique_id = "stokercloud_boiler_setpoint"
 
