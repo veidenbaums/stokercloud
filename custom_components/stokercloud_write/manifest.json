@@ -3,7 +3,7 @@
   "name": "StokerCloud Write",
   "version": "0.0.2",
   "iot_class": "cloud_polling",
-  "codeowners": ["@твій_нікнейм_на_github"],
+  "codeowners": ["@chaichuk"],
   "requirements": [],
   "loggers": ["custom_components.stokercloud_write"],
   "integration_type": "hub"
