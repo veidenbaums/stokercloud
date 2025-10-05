@@ -1,28 +1,22 @@
 set_value:
-  name: Set arbitrary StokerCloud value
-  description: Low-level setter via updatevalue.php
+  name: Set StokerCloud value
+  description: Write a setting via StokerCloud cloud endpoint (v2/dataout2/updatevalue.php with token).
   fields:
-    menu:
-      required: true
-      example: "boiler.temp"
-      selector:
-        text: {}
     name:
+      description: Setting key (e.g., boiler.temp, dhw.temp, misc.start)
+      example: boiler.temp
       required: true
-      example: "boiler.temp"
       selector:
-        text: {}
+        text:
     value:
+      description: Value to set (number or string)
+      example: 60.0
       required: true
-      example: 65
       selector:
-        number:
-          min: 0
-          max: 200
-          step: 1
-          mode: box
-    phpsessid:
-      required: false
-      example: "abcdef123456..."
+        text:
+    token:
+      description: Long StokerCloud token from DevTools URL
+      example: "8ff5758...d37c64..."
+      required: true
       selector:
-        text: {}
+        text:
