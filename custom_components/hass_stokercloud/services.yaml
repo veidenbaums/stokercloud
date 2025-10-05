@@ -1,0 +1,28 @@
+set_value:
+  name: Set arbitrary StokerCloud value
+  description: Low-level setter via updatevalue.php
+  fields:
+    menu:
+      required: true
+      example: "boiler.temp"
+      selector:
+        text: {}
+    name:
+      required: true
+      example: "boiler.temp"
+      selector:
+        text: {}
+    value:
+      required: true
+      example: 65
+      selector:
+        number:
+          min: 0
+          max: 200
+          step: 1
+          mode: box
+    phpsessid:
+      required: false
+      example: "abcdef123456..."
+      selector:
+        text: {}
