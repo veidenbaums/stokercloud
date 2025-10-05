@@ -1,53 +1,47 @@
 from __future__ import annotations
+
+
 import logging
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 
-from .const import (
-    DOMAIN, PLATFORMS,
-    CONF_SERIAL_NUMBER, CONF_TOKEN, CONF_PHPSESSID,
-    ATTR_MENU, ATTR_NAME, ATTR_VALUE, ATTR_PHPSESSID, ATTR_ENTRY_ID,
-)
-from .api import StokerCloudClient
+
+from .const import DOMAIN, PLATFORMS
+from .coordinator import StokerCoordinator
+
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    # YAML не використовуємо
-    return True
+
+coordinators: dict[str, StokerCoordinator] = {}
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+return True
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    session = async_get_clientsession(hass)
-    serial = entry.data[CONF_SERIAL_NUMBER]
-    token = entry.data[CONF_TOKEN]
-    phpsessid = entry.data.get(CONF_PHPSESSID) or None
+coordinator = StokerCoordinator(hass, entry)
+await coordinator.async_config_entry_first_refresh()
 
-    client = StokerCloudClient(session, token, phpsessid)
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {"client": client, "serial": serial}
+coordinators[entry.entry_id] = coordinator
 
-    if f"{DOMAIN}_service_registered" not in hass.data:
-        async def _handle_set_value(call: ServiceCall):
-            target_entry_id = call.data.get(ATTR_ENTRY_ID) or next(iter(hass.data[DOMAIN]), None)
-            data = hass.data[DOMAIN][target_entry_id]
-            client: StokerCloudClient = data["client"]
-            await client.update_value(
-                menu=call.data[ATTR_MENU],
-                name=call.data[ATTR_NAME],
-                value=call.data[ATTR_VALUE],
-                phpsessid=call.data.get(ATTR_PHPSESSID),
-            )
-        hass.services.async_register(DOMAIN, "set_value", _handle_set_value)
-        hass.data[f"{DOMAIN}_service_registered"] = True
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    _LOGGER.info("StokerCloud Write set up for serial=%s", serial)
-    return True
+await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+
+entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+return True
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-    return unload_ok
+unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+if unload_ok:
+coordinators.pop(entry.entry_id, None)
+return unload_ok
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+await hass.config_entries.async_reload(entry.entry_id)
