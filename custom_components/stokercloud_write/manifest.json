@@ -11,5 +11,5 @@
   "integration_type": "hub",
   "loggers": ["stokercloud_write"],
   "dependencies": [],
-  "after_dependencies": [],
+  "after_dependencies": []
 }
