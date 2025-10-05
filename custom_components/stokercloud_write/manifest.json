@@ -1,15 +1,12 @@
 {
   "domain": "stokercloud_write",
   "name": "StokerCloud Write by Chaichuk",
-  "version": "0.2.0",
-  "description": "Custom version of NBE Stoker Cloud with control support.",
+  "version": "0.1.1",
+  "description": "Custom NBE Stoker Cloud with write (temperature control).",
   "iot_class": "cloud_polling",
   "config_flow": true,
   "codeowners": ["@chaichuk"],
   "requirements": [],
   "loggers": ["custom_components.stokercloud_write"],
-  "integration_type": "hub",
-  "loggers": ["stokercloud_write"],
-  "dependencies": [],
-  "after_dependencies": []
+  "integration_type": "hub"
 }
