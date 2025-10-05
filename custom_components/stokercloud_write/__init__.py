@@ -18,6 +18,8 @@ coordinators: dict[str, StokerCoordinator] = {}
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+if DOMAIN not in hass.data:
+hass.data[DOMAIN] = {}
 return True
 
 
@@ -27,6 +29,7 @@ await coordinator.async_config_entry_first_refresh()
 
 
 coordinators[entry.entry_id] = coordinator
+hass.data[DOMAIN][entry.entry_id] = coordinator
 
 
 await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -40,6 +43,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 if unload_ok:
 coordinators.pop(entry.entry_id, None)
+hass.data[DOMAIN].pop(entry.entry_id, None)
 return unload_ok
 
 
