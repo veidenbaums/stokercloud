@@ -1,9 +1,15 @@
-from homeassistant.const import Platform
-
 DOMAIN = "stokercloud_write"
-MANUFACTURER = "NBE"
-MODEL = "StokerCloud"
-PLATFORMS: list[Platform] = [Platform.NUMBER]
-CONF_SERIAL = "serial"
+
 CONF_TOKEN = "token"
-BASE_URL = "https://stokercloud.dk"
+CONF_SERIAL = "serial"
+CONF_NAME = "name"
+
+ATTR_MANUFACTURER = "NBE"
+
+# URL для запису значення (boiler.temp). За потреби підкоригуй menu/name.
+UPDATE_URL = "https://stokercloud.dk/v2/dataout2/updatevalue.php"
+
+# Межі для поля вводу
+DEFAULT_MIN_TEMP = 30
+DEFAULT_MAX_TEMP = 90
+DEFAULT_STEP = 1.0
