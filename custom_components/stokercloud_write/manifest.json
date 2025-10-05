@@ -1,12 +1,16 @@
 {
-  "domain": "stokercloud_write",
-  "name": "StokerCloud Write by Chaichuk",
-  "version": "0.1.1",
-  "description": "Custom NBE Stoker Cloud with write (temperature control).",
-  "iot_class": "cloud_polling",
-  "config_flow": true,
-  "codeowners": ["@chaichuk"],
-  "requirements": [],
-  "loggers": ["custom_components.stokercloud_write"],
-  "integration_type": "hub"
+"domain": "stokercloud_write",
+"name": "StokerCloud (read + write)",
+"codeowners": ["@chaichuk"],
+"documentation": "https://github.com/chaichuk/stokercloud_write",
+"issue_tracker": "https://github.com/chaichuk/stokercloud_write/issues",
+"iot_class": "cloud_polling",
+"integration_type": "hub",
+"version": "0.3.0",
+"config_flow": true,
+"requirements": [],
+"loggers": ["custom_components.stokercloud_write"],
+"dependencies": [],
+"after_dependencies": [],
+"quality_scale": "silver"
 }
