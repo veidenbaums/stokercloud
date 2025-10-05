@@ -12,8 +12,8 @@ class StokerCloudWriteApi:
 
     async def async_set_boiler_setpoint(self, value: int) -> bool:
         url = URL(UPDATE_URL).with_query({
-            "menu": "boiler.temp",
-            "name": "boiler.temp",
+            "menu": "boiler_temperature_current",
+            "name": "boiler_temperature_current",
             "token": self._entry.data[CONF_TOKEN],
         })
         data = {"value": str(value)}
