@@ -5,11 +5,13 @@ from homeassistant.const import Platform
 from .const import DOMAIN
 from .api import StokerCloudWriteApi
 
-# Пре-імпорт платформ, щоб уникнути warning про import_module в event loop
 from . import number as _preload_number  # noqa: F401
+from . import switch as _preload_switch  # noqa: F401
 from . import sensor as _preload_sensor  # noqa: F401
+from . import binary_sensor as _preload_binary_sensor  # noqa: F40
 
-PLATFORMS: list[Platform] = [Platform.NUMBER, Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.NUMBER, Platform.SWITCH, Platform.SENSOR, Platform.BINARY_SENSOR]
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
