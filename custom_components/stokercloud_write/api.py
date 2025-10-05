@@ -3,8 +3,9 @@ from aiohttp import ClientSession
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from yarl import URL
 from .const import (
-    UPDATE_URL, READ_URL, CONF_TOKEN,
+    UPDATE_URL, CONTROLLERDATA_URL, CONF_TOKEN,
     MISC_START_NAME, MISC_STOP_NAME, MISC_CMD_VALUE,
+    DEFAULT_SCREEN_QUERY,
 )
 
 class StokerCloudWriteApi:
@@ -26,46 +27,189 @@ class StokerCloudWriteApi:
         except Exception:
             return False
 
-    async def async_get_boiler_temperature(self) -> float | None:
-        url = URL(READ_URL).with_query({
-            "menu": "boiler_temperature_current",
-            "name": "boiler_temperature_current",
+    async def async_set_power(self, turn_on: bool) -> bool:
+        name = MISC_START_NAME if turn_on else MISC_STOP_NAME
+        url = URL(UPDATE_URL).with_query({"name": name, "token": self._entry.data[CONF_TOKEN]})
+        try:
+            async with self._session.post(str(url), data={"value": MISC_CMD_VALUE}, timeout=10) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+    async def _fetch_controller_json(self) -> dict | None:
+        """Отримати JSON з controllerdata2.php."""
+        url = URL(CONTROLLERDATA_URL).with_query({
+            "screen": DEFAULT_SCREEN_QUERY,
             "token": self._entry.data[CONF_TOKEN],
         })
         try:
             async with self._session.get(str(url), timeout=15) as resp:
                 if resp.status != 200:
                     return None
-                ctype = (resp.headers.get("Content-Type") or "").lower()
-                if "application/json" in ctype:
-                    data = await resp.json()
-                    for key in ("value", "val", "temp", "temperature"):
-                        if key in data:
-                            return float(str(data[key]).replace(",", "."))
-                    for v in data.values():
-                        try:
-                            return float(str(v).replace(",", "."))
-                        except Exception:
-                            pass
-                    return None
-                text = (await resp.text()).strip().splitlines()[0]
-                return float(text.replace(",", "."))
+                return await resp.json(content_type=None)
         except Exception:
             return None
 
-    async def async_set_power(self, turn_on: bool) -> bool:
-        """
-        Увімкнути -> misc.start=1
-        Вимкнути  -> misc.stop=1
-        """
-        name = MISC_START_NAME if turn_on else MISC_STOP_NAME
-        url = URL(UPDATE_URL).with_query({
-            "name": name,
-            "token": self._entry.data[CONF_TOKEN],
-        })
-        data = {"value": MISC_CMD_VALUE}
+    async def async_get_boiler_temperature_from_controller(self) -> float | None:
+        """frontdata['boilertemp'] → °C"""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
         try:
-            async with self._session.post(str(url), data=data, timeout=10) as resp:
-                return resp.status == 200
+            for item in data.get("frontdata", []):
+                if str(item.get("id")) == "boilertemp":
+                    return float(str(item.get("value")).replace(",", "."))
         except Exception:
-            return False
+            pass
+        # Фолбек (інколи дорівнює фактичній температурі):
+        try:
+            wc = data.get("weathercomp") or {}
+            val = wc.get("zone1-actual", {}).get("val")
+            if val is not None:
+                return float(str(val).replace(",", "."))
+        except Exception:
+            pass
+        return None
+
+    async def async_get_external_temperature_from_controller(self) -> float | None:
+        """weatherdata[id=='7'] → зовнішня температура, °C."""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            for item in data.get("weatherdata", []):
+                if str(item.get("id")) == "7":  # lng_weather_7
+                    return float(str(item.get("value")).replace(",", "."))
+        except Exception:
+            pass
+        # Фолбек: інколи є в weathercomp.zone1-actualref.val
+        try:
+            wc = data.get("weathercomp") or {}
+            val = wc.get("zone1-actualref", {}).get("val")
+            if val is not None:
+                return float(str(val).replace(",", "."))
+        except Exception:
+            pass
+        return None
+
+    async def async_get_wanted_boiler_temp_from_controller(self) -> float | None:
+        """frontdata['-wantedboilertemp'] → °C."""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            for item in data.get("frontdata", []):
+                if str(item.get("id")) == "-wantedboilertemp":
+                    return float(str(item.get("value")).replace(",", "."))
+        except Exception:
+            pass
+        return None
+
+    async def async_get_dhw_temperature_from_controller(self) -> float | None:
+        """frontdata['dhw'] → °C."""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            for item in data.get("frontdata", []):
+                if str(item.get("id")) == "dhw":
+                    return float(str(item.get("value")).replace(",", "."))
+        except Exception:
+            pass
+        return None
+
+    async def async_get_dhw_wanted_temperature_from_controller(self) -> float | None:
+        """frontdata['dhwwanted'] → °C."""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            for item in data.get("frontdata", []):
+                if str(item.get("id")) == "dhwwanted":
+                    return float(str(item.get("value")).replace(",", "."))
+        except Exception:
+            pass
+        return None
+
+    async def async_get_shaft_temperature_from_controller(self) -> float | None:
+        """boilerdata[id=='7'] (lng_boil_7) → °C."""
+        data = await self._fetch_controller_json()
+        val = None
+        try:
+            for item in (data or {}).get("boilerdata", []):
+                if str(item.get("id")) == "7":
+                    val = float(str(item.get("value")).replace(",", "."))
+                    break
+        except Exception:
+            val = None
+
+        if val is not None:
+            return val
+
+        # Фолбек: якщо в основному screen не прийшов id=7, тягнемо його окремо
+        from yarl import URL
+        try:
+            url = URL(CONTROLLERDATA_URL).with_query({
+                "screen": "b1,7",
+                "token": self._entry.data[CONF_TOKEN],
+            })
+            async with self._session.get(str(url), timeout=10) as resp:
+                if resp.status != 200:
+                    return None
+                data2 = await resp.json(content_type=None)
+                for item in (data2 or {}).get("boilerdata", []):
+                    if str(item.get("id")) == "7":
+                        return float(str(item.get("value")).replace(",", "."))
+        except Exception:
+            return None
+
+        return None
+
+    async def async_get_boiler_running_from_controller(self) -> bool | None:
+        """miscdata.running → True/False."""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            running = (data.get("miscdata") or {}).get("running")
+            # приймаємо 1/"1"/True як ON
+            if running is None:
+                return None
+            s = str(running).strip().lower()
+            if s in ("1", "true", "on", "yes"):
+                return True
+            if s in ("0", "false", "off", "no"):
+                return False
+            # якщо число/float, трактуємо >0 як True
+            try:
+                return float(s) > 0
+            except Exception:
+                return None
+        except Exception:
+            return None
+
+    async def async_get_output_kw_from_controller(self) -> float | None:
+        """miscdata.output → кіловати (kW)."""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            val = (data.get("miscdata") or {}).get("output")
+            if val is None:
+                return None
+            return float(str(val).replace(",", "."))
+        except Exception:
+            return None
+
+    async def async_get_output_pct_from_controller(self) -> float | None:
+        """miscdata.outputpct → відсотки (%)."""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            val = (data.get("miscdata") or {}).get("outputpct")
+            if val is None:
+                return None
+            return float(str(val).replace(",", "."))
+        except Exception:
+            return None
