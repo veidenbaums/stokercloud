@@ -1,6 +1,7 @@
-# homeassistant-stokercloud
+# StokerCloud Write (custom integration)
 
-This is an integration between Home Assistant and stokercloud.dk
+Home Assistant integration for StokerCloud with **write (set temperature)** capability.
+This is a fork of Kristian Oellegaard's original integration with added control support.
 
 # Install
 
