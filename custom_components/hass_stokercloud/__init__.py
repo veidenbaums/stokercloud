@@ -1,41 +1,60 @@
-"""
-NBE Stoker Cloud
-"""
+from __future__ import annotations
 
-from homeassistant.core import HomeAssistant
+import logging
+from typing import Any
+
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.typing import ConfigType
-from .const import DOMAIN, PLATFORMS
-from homeassistant.config_entries import ConfigEntry
-import asyncio
-from stokercloud.client import Client as StokerCloudClient
-from homeassistant.const import CONF_USERNAME
+from homeassistant.helpers.discovery import async_load_platform
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .const import (
+    DOMAIN,
+    DATA_SCHEMA,
+    PLATFORMS,
+    # конфіг і сервісні ключі
+    CONF_TOKEN, CONF_PHPSESSID,
+    ATTR_MENU, ATTR_NAME, ATTR_VALUE, ATTR_PHPSESSID,
+)
+from .api import StokerCloudClient
 
-async def async_setup(hass: HomeAssistant, config: dict):
-    """Set up the component."""
-    hass.data[DOMAIN] = {}
-    return True
+_LOGGER = logging.getLogger(__name__)
 
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """YAML-налаштування інтеграції."""
+    conf: dict[str, Any] | None = config.get(DOMAIN)
+    if not conf:
+        _LOGGER.error("Missing '%s' section in configuration.yaml", DOMAIN)
+        return False
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    hass.data[DOMAIN][entry.entry_id] = StokerCloudClient(entry.data[CONF_USERNAME])
-    
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Валідація за твоєю схемою + нові поля
+    conf = DATA_SCHEMA(conf)
 
-    return True
+    session = async_get_clientsession(hass)
 
+    token = conf[CONF_TOKEN]
+    phpsessid = conf.get(CONF_PHPSESSID) or None
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Unload a config entry."""
-    unload_ok = all(
-        await asyncio.gather(
-            *[
-                hass.config_entries.async_forward_entry_unload(entry, component)
-                for component in PLATFORMS
-            ]
+    client = StokerCloudClient(session, token, phpsessid)
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN]["client"] = client
+    hass.data[DOMAIN]["config"] = conf
+
+    # Реєструємо low-level сервіс для будь-якого запису
+    async def _handle_set_value(call: ServiceCall):
+        await client.update_value(
+            menu=call.data[ATTR_MENU],
+            name=call.data[ATTR_NAME],
+            value=call.data[ATTR_VALUE],
+            phpsessid=call.data.get(ATTR_PHPSESSID) or None,
         )
-    )
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
 
-    return unload_ok
+    hass.services.async_register(DOMAIN, "set_value", _handle_set_value)
+
+    # Піднімаємо твої платформи + нашу нову 'number'
+    for platform in PLATFORMS:
+        await async_load_platform(hass, platform, DOMAIN, {}, config)
+
+    _LOGGER.info("StokerCloud YAML integration is set up with write support.")
+    return True
