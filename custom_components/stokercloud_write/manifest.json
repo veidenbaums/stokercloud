@@ -1,16 +1,12 @@
 {
-"domain": "stokercloud_write",
-"name": "StokerCloud (read + write)",
-"codeowners": ["@chaichuk"],
-"documentation": "https://github.com/chaichuk/stokercloud_write",
-"issue_tracker": "https://github.com/chaichuk/stokercloud_write/issues",
-"iot_class": "cloud_polling",
-"integration_type": "hub",
-"version": "0.3.0",
-"config_flow": true,
-"requirements": [],
-"loggers": ["custom_components.stokercloud_write"],
-"dependencies": [],
-"after_dependencies": [],
-"quality_scale": "silver"
+  "domain": "stokercloud_write",
+  "name": "StokerCloud Write",
+  "version": "0.1.0",
+  "documentation": "https://github.com/yourfork/stokercloud_write",
+  "issue_tracker": "https://github.com/yourfork/stokercloud_write/issues",
+  "codeowners": ["@yourname"],
+  "config_flow": true,
+  "requirements": [],
+  "iot_class": "cloud_push",
+  "loggers": ["custom_components.stokercloud_write"]
 }
