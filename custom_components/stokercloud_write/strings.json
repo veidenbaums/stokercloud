@@ -1,0 +1,19 @@
+{
+"title": "StokerCloud (read + write)",
+"config": {
+"step": {
+"user": {
+"title": "Connect to StokerCloud",
+"description": "Enter your serial number and API token.",
+"data": {
+"serial": "Serial number",
+"token": "Token",
+"scan_interval": "Scan interval (sec)"
+}
+}
+},
+"error": {
+"cannot_connect": "Cannot connect. Check serial/token."
+}
+}
+}
