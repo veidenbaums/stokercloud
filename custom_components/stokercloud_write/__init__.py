@@ -1,50 +1,54 @@
 from __future__ import annotations
-import logging
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import (
-    DOMAIN, PLATFORMS,
-    CONF_SERIAL_NUMBER, CONF_TOKEN, CONF_PHPSESSID,
-    ATTR_MENU, ATTR_NAME, ATTR_VALUE, ATTR_PHPSESSID, ATTR_ENTRY_ID,
-)
-from .api import StokerCloudClient
+from datetime import timedelta
+import logging
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.const import Platform
+
+from .const import DOMAIN, DEFAULT_SCAN_INTERVAL
+from .api import NBEApi
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    # YAML не використовуємо
-    return True
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    session = async_get_clientsession(hass)
-    serial = entry.data[CONF_SERIAL_NUMBER]
-    token = entry.data[CONF_TOKEN]
-    phpsessid = entry.data.get(CONF_PHPSESSID) or None
+    api = NBEApi(
+        serial=entry.data["serial"],
+        token=entry.data.get("token"),  # у тебе вже є токен для write
+        username=entry.data.get("username"),  # якщо залишаєш для сумісності
+    )
 
-    client = StokerCloudClient(session, token, phpsessid)
+    async def _async_update():
+        data = await api.async_get_status()  # очікуємо словник з усіма полями як в оригіналі
+        if not data:
+            raise UpdateFailed("Empty data from StokerCloud")
+        return data
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {"client": client, "serial": serial}
+    coordinator = DataUpdateCoordinator(
+        hass,
+        _LOGGER,
+        name=f"{DOMAIN}_coordinator",
+        update_method=_async_update,
+        update_interval=timedelta(seconds=entry.options.get("scan_interval", DEFAULT_SCAN_INTERVAL)),
+    )
 
-    if f"{DOMAIN}_service_registered" not in hass.data:
-        async def _handle_set_value(call: ServiceCall):
-            target_entry_id = call.data.get(ATTR_ENTRY_ID) or next(iter(hass.data[DOMAIN]), None)
-            data = hass.data[DOMAIN][target_entry_id]
-            client: StokerCloudClient = data["client"]
-            await client.update_value(
-                menu=call.data[ATTR_MENU],
-                name=call.data[ATTR_NAME],
-                value=call.data[ATTR_VALUE],
-                phpsessid=call.data.get(ATTR_PHPSESSID),
-            )
-        hass.services.async_register(DOMAIN, "set_value", _handle_set_value)
-        hass.data[f"{DOMAIN}_service_registered"] = True
+    await coordinator.async_config_entry_first_refresh()
+
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        "api": api,
+        "coordinator": coordinator,
+    }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    _LOGGER.info("StokerCloud Write set up for serial=%s", serial)
+    entry.async_on_unload(entry.add_update_listener(_async_reload))
     return True
+
+async def _async_reload(hass: HomeAssistant, entry: ConfigEntry):
+    await hass.config_entries.async_reload(entry.entry_id)
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
