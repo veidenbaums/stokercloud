@@ -6,10 +6,14 @@ CONF_NAME = "name"
 
 ATTR_MANUFACTURER = "NBE"
 
-# URL для запису значення (boiler.temp). За потреби підкоригуй menu/name.
+# WRITE endpoint
 UPDATE_URL = "https://stokercloud.dk/v2/dataout2/updatevalue.php"
+# READ endpoint (за потреби заміни на той, що у материнській інтеграції)
+READ_URL = "https://stokercloud.dk/v2/dataout2/getvalue.php"
 
-# Межі для поля вводу
 DEFAULT_MIN_TEMP = 30
 DEFAULT_MAX_TEMP = 90
 DEFAULT_STEP = 1.0
+
+# Інтервал опитування сенсорів, сек.
+DEFAULT_SCAN_INTERVAL = 30
