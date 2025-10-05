@@ -1,8 +1,9 @@
 {
   "domain": "stokercloud_write",
   "name": "StokerCloud Write",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "iot_class": "cloud_polling",
+  "config_flow": true,
   "codeowners": ["@chaichuk"],
   "requirements": [],
   "loggers": ["custom_components.stokercloud_write"],
