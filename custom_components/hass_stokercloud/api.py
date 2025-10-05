@@ -14,7 +14,7 @@ class StokerCloudClient:
         self._cookie = {"PHPSESSID": phpsessid} if phpsessid else None
 
     async def get_output_settings(self) -> Dict[str, Any]:
-        """Повертає налаштування/поточні значення (в т.ч. сетпоінт)"""
+        """Повертає налаштування/поточні значення (може містити сетпоінт)."""
         url = f"{BASE}/getoutputsettings.php"
         params = {"token": self._token}
         async with self._session.get(url, params=params, cookies=self._cookie) as resp:
@@ -24,18 +24,22 @@ class StokerCloudClient:
             try:
                 return await resp.json(content_type=None)
             except Exception:
+                # якщо відповідь не JSON — повернемо як сирий текст
                 return {"raw": txt}
 
     async def update_value(
         self, *, menu: str, name: str, value: Any, phpsessid: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Відправляє значення через updatevalue.php (рекомендовано POST).
-        Якщо треба — можна передати тимчасовий phpsessid тільки на цей виклик.
+        Відправляє значення через updatevalue.php (POST).
+        Параметри: menu, name, value, token.
+        Можна передати тимчасовий PHPSESSID тільки на цей виклик (phpsessid=...),
+        або використати стандартний з конструктора.
         """
         url = f"{BASE}/updatevalue.php"
         data = {"menu": menu, "name": name, "value": value, "token": self._token}
         cookies = {"PHPSESSID": phpsessid} if phpsessid else self._cookie
+
         async with self._session.post(url, data=data, cookies=cookies) as resp:
             txt = await resp.text()
             _LOGGER.debug("update_value: status=%s body=%s", resp.status, txt[:500])
