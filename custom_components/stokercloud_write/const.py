@@ -27,4 +27,4 @@ DATA_SCHEMA = vol.Schema({
 })
 
 # Додаємо 'number' до платформ (твоя water_heater лишається)
-PLATFORMS = ['sensor', 'water_heater', 'number']
+PLATFORMS = ['number']
