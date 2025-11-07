@@ -54,10 +54,8 @@ class BoilerRunningBinarySensor(CoordinatorEntity[DataUpdateCoordinator[bool | N
 
     @property
     def available(self) -> bool:
-        # якщо даних нема — сенсор показуватиме unavailable, а не хибний OFF
         return self.coordinator.data is not None
 
     @property
     def is_on(self) -> bool | None:
-        # True → Boiler ON, False → Boiler OFF
         return self.coordinator.data
