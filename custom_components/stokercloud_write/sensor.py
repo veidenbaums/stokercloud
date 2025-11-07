@@ -3,7 +3,7 @@ import logging
 from datetime import timedelta
 
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
-from homeassistant.const import UnitOfTemperature, UnitOfPower, PERCENTAGE
+from homeassistant.const import UnitOfTemperature, UnitOfPower, UnitOfMass, PERCENTAGE
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, CoordinatorEntity
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.config_entries import ConfigEntry
@@ -12,6 +12,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, ATTR_MANUFACTURER, CONF_SERIAL, CONF_NAME, BOILER_SCAN_INTERVAL
 from .api import StokerCloudWriteApi
+
+# fallback для одиниць освітленості (якщо потрібно)
+try:
+    from homeassistant.const import UnitOfIlluminance
+    ILLUM_UNIT = UnitOfIlluminance.LUX
+except Exception:
+    ILLUM_UNIT = "lx"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +49,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async def _upd_output_pct():
         return await api.async_get_output_pct_from_controller()
 
+    # NEW: сирий код стану (miscdata.state.value), напр. 'state_5'
+    async def _upd_state_code():
+        return await api.async_get_state_code_from_controller()
+
+    # (опційно) фото-датчик lux, якщо в тебе це використовується
+    async def _upd_photo_lux():
+        try:
+            if hasattr(api, "async_get_photo_sensor_lux_from_controller"):
+                return await api.async_get_photo_sensor_lux_from_controller()
+        except Exception as e:
+            _LOGGER.debug("Photo sensor update failed: %s", e)
+        return None
+    async def _upd_pump_state():
+        return await api.async_get_pump_state_from_controller()
+    async def _upd_oxygen():
+        return await api.async_get_oxygen_from_controller()
+    async def _upd_hopper_cons_24h():
+        return await api.async_get_hopper_consumption_24h_kg()
+        
     boiler_coord = DataUpdateCoordinator[float | None](
         hass, _LOGGER, name=f"{DOMAIN}_boiler_temp",
         update_method=_upd_boiler,
@@ -83,6 +109,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
     )
 
+    # NEW: координатор для коду стану
+    state_code_coord = DataUpdateCoordinator[str | None](
+        hass, _LOGGER, name=f"{DOMAIN}_state_code",
+        update_method=_upd_state_code,
+        update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
+    )
+
+    # (опційно) lux
+    photo_lux_coord = DataUpdateCoordinator[float | None](
+        hass, _LOGGER, name=f"{DOMAIN}_photo_lux",
+        update_method=_upd_photo_lux,
+        update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
+    )
+    pump_state_coord = DataUpdateCoordinator[str | None](
+        hass, _LOGGER, name=f"{DOMAIN}_pump_state",
+        update_method=_upd_pump_state,
+        update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
+    )
+    oxygen_coord = DataUpdateCoordinator[float | None](
+        hass, _LOGGER, name=f"{DOMAIN}_oxygen",
+        update_method=_upd_oxygen,
+        update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
+    )
+    hopper_cons_24h_coord = DataUpdateCoordinator[float | None](
+        hass,
+        _LOGGER,
+        name=f"{DOMAIN}_hopper_cons_24h",
+        update_method=_upd_hopper_cons_24h,
+        update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
+    )
     await boiler_coord.async_config_entry_first_refresh()
     await external_coord.async_config_entry_first_refresh()
     await wanted_boiler_coord.async_config_entry_first_refresh()
@@ -92,6 +148,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     await output_kw_coord.async_config_entry_first_refresh()
     await output_pct_coord.async_config_entry_first_refresh()
 
+    # NEW:
+    await state_code_coord.async_config_entry_first_refresh()
+    await photo_lux_coord.async_config_entry_first_refresh()
+    await pump_state_coord.async_config_entry_first_refresh()
+    await oxygen_coord.async_config_entry_first_refresh()
+    await hopper_cons_24h_coord.async_config_entry_first_refresh()
+    
     async_add_entities(
         [
             BoilerTemperatureSensor(entry, boiler_coord),
@@ -102,6 +165,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             ShaftTemperatureSensor(entry, shaft_coord),
             OutputPowerKwSensor(entry, output_kw_coord),
             OutputPowerPercentSensor(entry, output_pct_coord),
+            PumpStateSensor(entry, pump_state_coord),
+            OxygenSensor(entry, oxygen_coord),
+            HopperConsumption24hSensor(entry, hopper_cons_24h_coord),
+            # NEW: дружній текстовий сенсор стану
+            StateTextSensor(entry, state_code_coord),
+
+            # (опційно) lux
+            PhotoIlluminanceSensor(entry, photo_lux_coord),
         ],
         True,
     )
@@ -209,3 +280,167 @@ class OutputPowerPercentSensor(CoordinatorEntity[DataUpdateCoordinator[float | N
     @property
     def native_value(self) -> float | None:
         return self.coordinator.data
+
+
+# NEW: дружній текстовий сенсор стану
+class StateTextSensor(CoordinatorEntity[DataUpdateCoordinator[str | None]], SensorEntity):
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:flash"
+
+    def __init__(self, entry: ConfigEntry, coordinator: DataUpdateCoordinator[str | None]):
+        super().__init__(coordinator)
+        serial = entry.data.get(CONF_SERIAL, "unknown")
+        dev_name = entry.data.get(CONF_NAME) or f"NBE {serial}"
+        self._attr_unique_id = f"{serial}_state"
+        self._attr_name = "State"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, serial)},
+            manufacturer=ATTR_MANUFACTURER,
+            name=dev_name,
+            model="StokerCloud",
+        )
+
+    @property
+    def native_value(self) -> str | None:
+        code = self.coordinator.data
+        if not code:
+            return None
+        # Мапа кодів у дружній текст
+        mapping = {
+            "state_14": "OFF",
+            "state_5": "Power",
+            "state_2": "Ignition",
+        }
+        return mapping.get(str(code), str(code))
+
+    @property
+    def extra_state_attributes(self):
+        return {"raw_code": self.coordinator.data}
+
+
+# (опційно) Сенсор освітленості
+class PhotoIlluminanceSensor(CoordinatorEntity[DataUpdateCoordinator[float | None]], SensorEntity):
+    _attr_device_class = SensorDeviceClass.ILLUMINANCE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:brightness-5"
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = ILLUM_UNIT
+
+    def __init__(self, entry: ConfigEntry, coordinator: DataUpdateCoordinator[float | None]):
+        super().__init__(coordinator)
+        serial = entry.data.get(CONF_SERIAL, "unknown")
+        dev_name = entry.data.get(CONF_NAME) or f"NBE {serial}"
+        self._attr_unique_id = f"{serial}_photo_lux"
+        self._attr_name = "Photo sensor"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, serial)},
+            manufacturer=ATTR_MANUFACTURER,
+            name=dev_name,
+            model="StokerCloud",
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.data
+class PumpStateSensor(CoordinatorEntity[DataUpdateCoordinator[str | None]], SensorEntity):
+    _attr_icon = "mdi:pump"
+    _attr_has_entity_name = True
+
+    def __init__(self, entry: ConfigEntry, coordinator: DataUpdateCoordinator[str | None]):
+        super().__init__(coordinator)
+        serial = entry.data.get(CONF_SERIAL, "unknown")
+        dev_name = entry.data.get(CONF_NAME) or f"NBE {serial}"
+        self._attr_unique_id = f"{serial}_pump_state"
+        self._attr_name = "Pump State"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, serial)},
+            manufacturer=ATTR_MANUFACTURER,
+            name=dev_name,
+            model="StokerCloud",
+        )
+
+    @property
+    def available(self) -> bool:
+        # unavailable якщо API не дав значення
+        return self.coordinator.data is not None
+
+    @property
+    def native_value(self) -> str | None:
+        val = self.coordinator.data
+        if val is None:
+            return None
+        # Повертаймо "ON"/"OFF" як є (нормалізовано в API)
+        return val
+
+    @property
+    def extra_state_attributes(self):
+        # Можеш прибрати, якщо не потрібно
+        return {"source_path": "leftoutput.output-2.val"}
+class OxygenSensor(CoordinatorEntity[DataUpdateCoordinator[float | None]], SensorEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Oxygen"
+    _attr_icon = "mdi:gas-cylinder"
+    _attr_device_class = SensorDeviceClass.POWER_FACTOR  # або без нього, бо відсотки
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, entry: ConfigEntry, coordinator: DataUpdateCoordinator[float | None]):
+        super().__init__(coordinator)
+        serial = entry.data.get(CONF_SERIAL, "unknown")
+        dev_name = entry.data.get(CONF_NAME) or f"NBE {serial}"
+        self._attr_unique_id = f"{serial}_oxygen"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, serial)},
+            manufacturer=ATTR_MANUFACTURER,
+            name=dev_name,
+            model="StokerCloud",
+        )
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.data is not None
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.data
+
+    @property
+    def extra_state_attributes(self):
+        return {"source_path": "boilerdata[id=12].value"}
+class HopperConsumption24hSensor(CoordinatorEntity, SensorEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Pellet consumption (last 24h)"
+    _attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    # device_class не ставимо: це не вага предмета, а агрегована метрика за період
+
+    def __init__(self, entry: ConfigEntry, coordinator: DataUpdateCoordinator[float | None]):
+        super().__init__(coordinator)
+        serial = entry.data.get(CONF_SERIAL, "unknown")
+        dev_name = entry.data.get(CONF_NAME) or f"NBE {serial}"
+        self._attr_unique_id = f"{serial}_hopper_consumption_24h"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, serial)},
+            manufacturer=ATTR_MANUFACTURER,
+            name=dev_name,
+            model="StokerCloud",
+        )
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.data is not None
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.data
+
+    @property
+    def extra_state_attributes(self):
+        # Невеличкий дебаг, щоб одразу видно було джерело
+        return {
+            "source_array": "hopperdata",
+            "source_id": "3",
+            "source_selection": "hopper2",
+            "meaning": "Consumption last 24 h.",
+            "api_endpoint": "controllerdata2.php",
+        }
