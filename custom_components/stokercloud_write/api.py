@@ -5,7 +5,7 @@ from yarl import URL
 from .const import (
     UPDATE_URL, CONTROLLERDATA_URL, CONF_TOKEN,
     MISC_START_NAME, MISC_STOP_NAME, MISC_CMD_VALUE,
-    DEFAULT_SCREEN_QUERY,
+    DEFAULT_SCREEN_QUERY, 
 )
 
 class StokerCloudWriteApi:
@@ -213,3 +213,171 @@ class StokerCloudWriteApi:
             return float(str(val).replace(",", "."))
         except Exception:
             return None
+
+    # ---------------------------
+    # NEW: Photo sensor (lux)
+    # ---------------------------
+
+    def _find_value_by_id_and_selection(self, obj, target_id: str = "6", target_sel: str = "boiler4"):
+        """Depth-first пошук value у довільній структурі (dict/list) за id і selection."""
+        try:
+            if isinstance(obj, dict):
+                if str(obj.get("id")) == str(target_id) and str(obj.get("selection")) == str(target_sel):
+                    return obj.get("value") or obj.get("val")
+                for v in obj.values():
+                    found = self._find_value_by_id_and_selection(v, target_id, target_sel)
+                    if found is not None:
+                        return found
+                return None
+            if isinstance(obj, list):
+                for item in obj:
+                    found = self._find_value_by_id_and_selection(item, target_id, target_sel)
+                    if found is not None:
+                        return found
+                return None
+            return None
+        except Exception:
+            return None
+
+    async def async_get_photo_sensor_lux_from_controller(self) -> float | None:
+        """
+        Освітленість (lux) з controllerdata2.php — шукаємо елемент з id="6" і selection="boiler4".
+        Повертає float або None; винятків не підіймає.
+        """
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            raw = self._find_value_by_id_and_selection(data, target_id="6", target_sel="boiler4")
+            if raw in (None, ""):
+                return None
+            return float(str(raw).replace(",", "."))
+        except Exception:
+            return None
+    # ---------------------------
+    # NEW: state code (miscdata.state.value)
+    # ---------------------------
+    async def async_get_state_code_from_controller(self) -> str | None:
+        """Return raw state code from miscdata.state.value, e.g., 'state_5'."""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            misc = data.get("miscdata") or {}
+            state = misc.get("state") or {}
+            val = state.get("value")
+            if not val:
+                return None
+            return str(val)
+        except Exception:
+            return None
+    async def async_get_pump_state_from_controller(self) -> str | None:
+        """Return 'ON'/'OFF' from leftoutput.output-2.val."""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            left = data.get("leftoutput") or {}
+            out2 = left.get("output-2") or {}
+            val = out2.get("val")
+            if val is None:
+                return None
+            # нормалізуємо у верхній регістр
+            return str(val).upper()
+        except Exception:
+            return None
+    async def async_get_oxygen_from_controller(self) -> float | None:
+        """
+        Read oxygen level (%) from boilerdata[id=12].value.
+        Returns float in percent.
+        """
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            boiler = data.get("boilerdata") or []
+            item = next((x for x in boiler if str(x.get("id")) == "12"), None)
+            if not item:
+                return None
+            raw = item.get("value")
+            if raw is None or raw == "":
+                return None
+            return float(raw)
+        except Exception:
+            return None
+            
+    async def async_get_hopper_consumption_24h_kg(self) -> float | None:
+        """
+        З controllerdata2.php: hopperdata[id='3'] або selection='hopper2' → кг за останні 24 години.
+        Повертає float або None.
+        """
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+
+        hopper = (data.get("hopperdata") or [])
+        # 1) пріоритет за ID
+        item = next((x for x in hopper if str(x.get("id")) == "3"), None)
+        # 2) запасний варіант — за selection
+        if not item:
+            item = next((x for x in hopper if str(x.get("selection")) == "hopper2"), None)
+        if not item:
+            return None
+
+        raw = item.get("value")
+        if raw in ("", None):
+            return None
+
+        try:
+            # На випадок "8,9"
+            return float(str(raw).replace(",", "."))
+        except Exception:
+            return None
+    async def async_get_hopper_content_kg(self) -> float | None:
+        """
+        Читає frontdata → id='hoppercontent' → value (кг) з controllerdata2.php.
+        """
+        try:
+            from yarl import URL
+            params = {"screen": DEFAULT_SCREEN_QUERY, "token": self._entry.data[CONF_TOKEN]}
+            async with self._session.get(str(URL(CONTROLLERDATA_URL).with_query(params)), timeout=15) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json(content_type=None)
+        except Exception:
+            return None
+
+        front = (data or {}).get("frontdata") or []
+        item = next((x for x in front if str(x.get("id")) == "hoppercontent"), None)
+        if not item:
+            return None
+
+        raw = item.get("value")
+        if raw in ("", None):
+            return None
+
+        try:
+            return float(str(raw).replace(",", "."))
+        except Exception:
+            return None
+
+    async def async_set_hopper_content_kg(self, value_kg: float) -> None:
+        """
+        Оновлює hopper.content через POST form-data на updatevalue.php.
+        Оптимістична модель: не парсимо відповідь і не перевіряємо статус.
+        """
+        token = self._entry.data.get(CONF_TOKEN)
+        if not token:
+            return
+
+        payload = {
+            "menu": "hopper.content",
+            "name": "hopper.content",
+            "token": token,
+            "value": f"{float(value_kg):.1f}",
+        }
+        try:
+            async with self._session.post(UPDATE_URL, data=payload, timeout=10):
+                pass
+        except Exception:
+            return
