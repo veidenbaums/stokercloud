@@ -89,11 +89,11 @@ Once connected, a device (e.g. **NBE 23862 (My Boiler)**) is created with all se
 | `sensor.oxygen` | O₂ level (%) |
 | `sensor.power_percent` | Boiler power (%) |
 | `sensor.power_kw` | Boiler power (kW) |
-| `sensor.hopper_content` | Remaining pellets (kg) |
 | `sensor.pellet_consumption_last_24h` | Pellet usage (last 24h) |
 | `sensor.photo_sensor` | Photodiode reading |
 | `sensor.state` | Operational status |
 | `sensor.pump_state` | Circulation pump status |
+| `sensor.hopper_content` | Hopper content (kg) |
 
 ### 🎛️ Controls
 

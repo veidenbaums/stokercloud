@@ -1,7 +1,7 @@
 {
   "domain": "stokercloud_write",
   "name": "StokerCloud Control",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "documentation": "https://github.com/chaichuk/stokercloud_write",
   "issue_tracker": "https://github.com/chaichuk/stokercloud_write/issues",
   "codeowners": ["@chaichuk"],

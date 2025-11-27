@@ -7,7 +7,7 @@ from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.const import UnitOfTemperature, UnitOfMass
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, CoordinatorEntity
-from homeassistant.helpers.restore_state import RestoreEntity
+# RestoreEntity більше не потрібен, бо ми беремо актуальні дані
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     DOMAIN, ATTR_MANUFACTURER, CONF_SERIAL, CONF_NAME,
     DEFAULT_MIN_TEMP, DEFAULT_MAX_TEMP, DEFAULT_STEP,
-    BOILER_SCAN_INTERVAL,  # ← додано
+    BOILER_SCAN_INTERVAL,
 )
 from .api import StokerCloudWriteApi
 
@@ -25,10 +25,22 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     api: StokerCloudWriteApi = hass.data[DOMAIN][entry.entry_id]
 
-    # Boiler setpoint — без змін
-    async_add_entities([BoilerSetpointNumber(entry, api)], True)
+    # --- 1. Координатор для Температури Котла (Setpoint) ---
+    async def _upd_boiler_setpoint():
+        # Беремо те саме значення, що й sensor.wanted_boiler_temperature
+        return await api.async_get_wanted_boiler_temp_from_controller()
 
-    # Hopper content — ДОДАНО координатор для періодичного оновлення
+    boiler_setpoint_coord = DataUpdateCoordinator[float | None](
+        hass,
+        _LOGGER,
+        name=f"{DOMAIN}_boiler_setpoint",
+        update_method=_upd_boiler_setpoint,
+        update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
+    )
+    # Одразу тягнемо дані при старті, щоб не було "Unknown"
+    await boiler_setpoint_coord.async_config_entry_first_refresh()
+
+    # --- 2. Координатор для Бункера (Hopper Content) ---
     async def _upd_hopper_content():
         return await api.async_get_hopper_content_kg()
 
@@ -41,11 +53,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     )
     await hopper_content_coord.async_config_entry_first_refresh()
 
-    # Передаємо координатор у ентіті
-    async_add_entities([HopperContentNumber(entry, api, hopper_content_coord)], update_before_add=True)
+    # Додаємо обидва намбери
+    async_add_entities([
+        BoilerSetpointNumber(entry, api, boiler_setpoint_coord),
+        HopperContentNumber(entry, api, hopper_content_coord)
+    ], update_before_add=True)
 
 
-class BoilerSetpointNumber(RestoreEntity, NumberEntity):
+class BoilerSetpointNumber(CoordinatorEntity, NumberEntity):
+    """
+    Керування цільовою температурою котла.
+    Тепер використовує CoordinatorEntity, щоб завжди показувати актуальну
+    температуру (wanted_boiler_temp) з контролера.
+    """
     _attr_has_entity_name = True
     _attr_name = "Boiler temperature setpoint"
     _attr_icon = "mdi:thermometer-chevron-up"
@@ -55,7 +75,8 @@ class BoilerSetpointNumber(RestoreEntity, NumberEntity):
     _attr_native_max_value = DEFAULT_MAX_TEMP
     _attr_native_step = DEFAULT_STEP
 
-    def __init__(self, entry: ConfigEntry, api: StokerCloudWriteApi):
+    def __init__(self, entry: ConfigEntry, api: StokerCloudWriteApi, coordinator: DataUpdateCoordinator[float | None]):
+        super().__init__(coordinator)
         self._entry = entry
         self._api = api
         self._serial = entry.data.get(CONF_SERIAL, "unknown")
@@ -66,26 +87,29 @@ class BoilerSetpointNumber(RestoreEntity, NumberEntity):
             name=entry.data.get(CONF_NAME) or f"NBE {self._serial}",
             model="StokerCloud",
         )
-        self._attr_native_value = None
-
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        if (last := await self.async_get_last_state()) is not None:
-            try:
-                self._attr_native_value = float(last.state)
-            except (TypeError, ValueError):
-                self._attr_native_value = None
-        self.async_write_ha_state()
 
     @property
     def available(self) -> bool:
-        return True
+        return self.coordinator.data is not None
+
+    @property
+    def native_value(self) -> float | None:
+        # Повертає значення з координатора (те саме, що в sensor.wanted_boiler_temperature)
+        return self.coordinator.data
 
     async def async_set_native_value(self, value: float) -> None:
+        # 1. Відправляємо команду на котел
         ok = await self._api.async_set_boiler_setpoint(int(round(value)))
+        
         if ok:
-            self._attr_native_value = float(value)
+            # 2. Оптимістичне оновлення: одразу малюємо нове значення в UI, не чекаючи наступного опитування
+            self.coordinator.data = float(value)
             self.async_write_ha_state()
+            
+            # (Опційно) Можна попросити координатор оновитися з API, щоб переконатися
+            # await self.coordinator.async_request_refresh()
+        else:
+            _LOGGER.warning("Failed to set boiler temperature to %s", value)
 
 
 class HopperContentNumber(CoordinatorEntity, NumberEntity):
@@ -113,19 +137,12 @@ class HopperContentNumber(CoordinatorEntity, NumberEntity):
             model="StokerCloud",
         )
 
-    async def async_added_to_hass(self) -> None:
-        # координатор уже зробив перше читання у setup_entry; просто відмалюємо стан
-        self.async_write_ha_state()
-        await super().async_added_to_hass()
-
     @property
     def available(self) -> bool:
-        # доступний, коли маємо дані з останнього pull
         return self.coordinator.data is not None
 
     @property
     def native_value(self) -> float | None:
-        # завжди показуємо останнє значення з API/координатора
         return self.coordinator.data
 
     async def async_set_native_value(self, value: float) -> None:
@@ -133,8 +150,5 @@ class HopperContentNumber(CoordinatorEntity, NumberEntity):
         self.coordinator.data = float(value)
         self.async_write_ha_state()
 
-        # 2) Шлемо POST form-data на бекенд (без перевірки статусу)
+        # 2) Шлемо POST form-data на бекенд
         await self._api.async_set_hopper_content_kg(float(value))
-
-        # 3) (необов'язково) одразу попросити свіже читання; можна лишити вимкненим
-        # await self.coordinator.async_request_refresh()

@@ -61,12 +61,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         except Exception as e:
             _LOGGER.debug("Photo sensor update failed: %s", e)
         return None
+    
     async def _upd_pump_state():
         return await api.async_get_pump_state_from_controller()
+    
     async def _upd_oxygen():
         return await api.async_get_oxygen_from_controller()
+    
     async def _upd_hopper_cons_24h():
         return await api.async_get_hopper_consumption_24h_kg()
+
+    # --- НОВЕ: Оновлення залишку в бункері (кг) для сенсора ---
+    async def _upd_hopper_content():
+        return await api.async_get_hopper_content_kg()
         
     boiler_coord = DataUpdateCoordinator[float | None](
         hass, _LOGGER, name=f"{DOMAIN}_boiler_temp",
@@ -139,6 +146,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         update_method=_upd_hopper_cons_24h,
         update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
     )
+    
+    # --- НОВЕ: Координатор залишку бункера ---
+    hopper_content_coord = DataUpdateCoordinator[float | None](
+        hass,
+        _LOGGER,
+        name=f"{DOMAIN}_hopper_content_sensor",
+        update_method=_upd_hopper_content,
+        update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
+    )
+
     await boiler_coord.async_config_entry_first_refresh()
     await external_coord.async_config_entry_first_refresh()
     await wanted_boiler_coord.async_config_entry_first_refresh()
@@ -148,12 +165,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     await output_kw_coord.async_config_entry_first_refresh()
     await output_pct_coord.async_config_entry_first_refresh()
 
-    # NEW:
     await state_code_coord.async_config_entry_first_refresh()
     await photo_lux_coord.async_config_entry_first_refresh()
     await pump_state_coord.async_config_entry_first_refresh()
     await oxygen_coord.async_config_entry_first_refresh()
     await hopper_cons_24h_coord.async_config_entry_first_refresh()
+    
+    # --- НОВЕ: Перше оновлення ---
+    await hopper_content_coord.async_config_entry_first_refresh()
     
     async_add_entities(
         [
@@ -168,11 +187,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             PumpStateSensor(entry, pump_state_coord),
             OxygenSensor(entry, oxygen_coord),
             HopperConsumption24hSensor(entry, hopper_cons_24h_coord),
-            # NEW: дружній текстовий сенсор стану
             StateTextSensor(entry, state_code_coord),
-
-            # (опційно) lux
             PhotoIlluminanceSensor(entry, photo_lux_coord),
+            
+            # --- НОВЕ: Додаємо сенсор ---
+            HopperContentSensor(entry, hopper_content_coord),
         ],
         True,
     )
@@ -282,7 +301,6 @@ class OutputPowerPercentSensor(CoordinatorEntity[DataUpdateCoordinator[float | N
         return self.coordinator.data
 
 
-# NEW: дружній текстовий сенсор стану
 class StateTextSensor(CoordinatorEntity[DataUpdateCoordinator[str | None]], SensorEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:flash"
@@ -305,7 +323,6 @@ class StateTextSensor(CoordinatorEntity[DataUpdateCoordinator[str | None]], Sens
         code = self.coordinator.data
         if not code:
             return None
-        # Мапа кодів у дружній текст
         mapping = {
             "state_14": "OFF",
             "state_5": "Power",
@@ -318,7 +335,6 @@ class StateTextSensor(CoordinatorEntity[DataUpdateCoordinator[str | None]], Sens
         return {"raw_code": self.coordinator.data}
 
 
-# (опційно) Сенсор освітленості
 class PhotoIlluminanceSensor(CoordinatorEntity[DataUpdateCoordinator[float | None]], SensorEntity):
     _attr_device_class = SensorDeviceClass.ILLUMINANCE
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -342,6 +358,8 @@ class PhotoIlluminanceSensor(CoordinatorEntity[DataUpdateCoordinator[float | Non
     @property
     def native_value(self) -> float | None:
         return self.coordinator.data
+
+
 class PumpStateSensor(CoordinatorEntity[DataUpdateCoordinator[str | None]], SensorEntity):
     _attr_icon = "mdi:pump"
     _attr_has_entity_name = True
@@ -361,7 +379,6 @@ class PumpStateSensor(CoordinatorEntity[DataUpdateCoordinator[str | None]], Sens
 
     @property
     def available(self) -> bool:
-        # unavailable якщо API не дав значення
         return self.coordinator.data is not None
 
     @property
@@ -369,18 +386,18 @@ class PumpStateSensor(CoordinatorEntity[DataUpdateCoordinator[str | None]], Sens
         val = self.coordinator.data
         if val is None:
             return None
-        # Повертаймо "ON"/"OFF" як є (нормалізовано в API)
         return val
 
     @property
     def extra_state_attributes(self):
-        # Можеш прибрати, якщо не потрібно
         return {"source_path": "leftoutput.output-2.val"}
+
+
 class OxygenSensor(CoordinatorEntity[DataUpdateCoordinator[float | None]], SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Oxygen"
     _attr_icon = "mdi:gas-cylinder"
-    _attr_device_class = SensorDeviceClass.POWER_FACTOR  # або без нього, бо відсотки
+    _attr_device_class = SensorDeviceClass.POWER_FACTOR
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
 
@@ -407,12 +424,13 @@ class OxygenSensor(CoordinatorEntity[DataUpdateCoordinator[float | None]], Senso
     @property
     def extra_state_attributes(self):
         return {"source_path": "boilerdata[id=12].value"}
+
+
 class HopperConsumption24hSensor(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Pellet consumption (last 24h)"
     _attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
     _attr_state_class = SensorStateClass.MEASUREMENT
-    # device_class не ставимо: це не вага предмета, а агрегована метрика за період
 
     def __init__(self, entry: ConfigEntry, coordinator: DataUpdateCoordinator[float | None]):
         super().__init__(coordinator)
@@ -436,7 +454,6 @@ class HopperConsumption24hSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        # Невеличкий дебаг, щоб одразу видно було джерело
         return {
             "source_array": "hopperdata",
             "source_id": "3",
@@ -444,3 +461,34 @@ class HopperConsumption24hSensor(CoordinatorEntity, SensorEntity):
             "meaning": "Consumption last 24 h.",
             "api_endpoint": "controllerdata2.php",
         }
+
+
+# --- НОВЕ: Клас сенсора залишку пелет ---
+class HopperContentSensor(CoordinatorEntity[DataUpdateCoordinator[float | None]], SensorEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Hopper content"
+    _attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_device_class = SensorDeviceClass.WEIGHT  # Можна додати клас пристрою "Вага"
+    _attr_icon = "mdi:silo"
+
+    def __init__(self, entry: ConfigEntry, coordinator: DataUpdateCoordinator[float | None]):
+        super().__init__(coordinator)
+        serial = entry.data.get(CONF_SERIAL, "unknown")
+        dev_name = entry.data.get(CONF_NAME) or f"NBE {serial}"
+        # Додаємо _sensor, щоб не було конфлікту ID з number.hopper_content
+        self._attr_unique_id = f"{serial}_hopper_content_sensor"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, serial)},
+            manufacturer=ATTR_MANUFACTURER,
+            name=dev_name,
+            model="StokerCloud",
+        )
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.data is not None
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.data
