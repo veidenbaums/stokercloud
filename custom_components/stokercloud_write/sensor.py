@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN, ATTR_MANUFACTURER, CONF_SERIAL, CONF_NAME, BOILER_SCAN_INTERVAL
 from .api import StokerCloudWriteApi
 
-# fallback для одиниць освітленості (якщо потрібно)
+# fallback for illuminance units (if needed)
 try:
     from homeassistant.const import UnitOfIlluminance
     ILLUM_UNIT = UnitOfIlluminance.LUX
@@ -49,11 +49,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async def _upd_output_pct():
         return await api.async_get_output_pct_from_controller()
 
-    # NEW: сирий код стану (miscdata.state.value), напр. 'state_5'
+    # NEW: raw state code (miscdata.state.value), e.g. 'state_5'
     async def _upd_state_code():
         return await api.async_get_state_code_from_controller()
 
-    # (опційно) фото-датчик lux, якщо в тебе це використовується
+    # (optional) photo sensor lux, if you use it
     async def _upd_photo_lux():
         try:
             if hasattr(api, "async_get_photo_sensor_lux_from_controller"):
@@ -71,7 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async def _upd_hopper_cons_24h():
         return await api.async_get_hopper_consumption_24h_kg()
 
-    # --- НОВЕ: Оновлення залишку в бункері (кг) для сенсора ---
+    # --- NEW: Update hopper remaining amount (kg) for the sensor ---
     async def _upd_hopper_content():
         return await api.async_get_hopper_content_kg()
         
@@ -116,14 +116,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
     )
 
-    # NEW: координатор для коду стану
+    # NEW: coordinator for the state code
     state_code_coord = DataUpdateCoordinator[str | None](
         hass, _LOGGER, name=f"{DOMAIN}_state_code",
         update_method=_upd_state_code,
         update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
     )
 
-    # (опційно) lux
+    # (optional) lux from photo sensor
     photo_lux_coord = DataUpdateCoordinator[float | None](
         hass, _LOGGER, name=f"{DOMAIN}_photo_lux",
         update_method=_upd_photo_lux,
@@ -147,7 +147,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
     )
     
-    # --- НОВЕ: Координатор залишку бункера ---
+    # --- NEW: Hopper content coordinator ---
     hopper_content_coord = DataUpdateCoordinator[float | None](
         hass,
         _LOGGER,
@@ -171,7 +171,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     await oxygen_coord.async_config_entry_first_refresh()
     await hopper_cons_24h_coord.async_config_entry_first_refresh()
     
-    # --- НОВЕ: Перше оновлення ---
+    # --- NEW: Initial update ---
     await hopper_content_coord.async_config_entry_first_refresh()
     
     async_add_entities(
@@ -190,7 +190,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             StateTextSensor(entry, state_code_coord),
             PhotoIlluminanceSensor(entry, photo_lux_coord),
             
-            # --- НОВЕ: Додаємо сенсор ---
+            # --- NEW: Add sensor ---
             HopperContentSensor(entry, hopper_content_coord),
         ],
         True,
@@ -463,20 +463,20 @@ class HopperConsumption24hSensor(CoordinatorEntity, SensorEntity):
         }
 
 
-# --- НОВЕ: Клас сенсора залишку пелет ---
+# --- NEW: Hopper pellet remainder sensor class ---
 class HopperContentSensor(CoordinatorEntity[DataUpdateCoordinator[float | None]], SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Hopper content"
     _attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_device_class = SensorDeviceClass.WEIGHT  # Можна додати клас пристрою "Вага"
+    _attr_device_class = SensorDeviceClass.WEIGHT  # You can add the device class "Weight".
     _attr_icon = "mdi:silo"
 
     def __init__(self, entry: ConfigEntry, coordinator: DataUpdateCoordinator[float | None]):
         super().__init__(coordinator)
         serial = entry.data.get(CONF_SERIAL, "unknown")
         dev_name = entry.data.get(CONF_NAME) or f"NBE {serial}"
-        # Додаємо _sensor, щоб не було конфлікту ID з number.hopper_content
+        # We add _sensor to avoid an ID conflict with number.hopper_content.
         self._attr_unique_id = f"{serial}_hopper_content_sensor"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, serial)},

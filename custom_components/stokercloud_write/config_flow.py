@@ -8,14 +8,14 @@ from .const import DOMAIN, CONF_SERIAL, CONF_TOKEN, CONF_NAME
 
 
 class StokerCloudWriteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Майстер налаштування StokerCloud Write."""
+    """StokerCloud Write setup wizard."""
 
     VERSION = 1
 
     async def async_step_user(self, user_input=None) -> FlowResult:
         if user_input is not None:
             serial = user_input[CONF_SERIAL]
-            # Уникати дубліката за серійним номером
+            # Avoid duplicates by serial number.
             await self.async_set_unique_id(serial)
             self._abort_if_unique_id_configured()
             return self.async_create_entry(

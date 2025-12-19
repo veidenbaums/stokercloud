@@ -23,7 +23,7 @@ MISC_START_NAME = "misc.start"
 MISC_STOP_NAME  = "misc.stop"
 MISC_CMD_VALUE  = "1"
 
-# Екран як у твоєму DevTools (можеш змінити на інший за потреби)
+# Screen as in your DevTools (you can change it to another if needed)
 DEFAULT_SCREEN_QUERY = (
     "b1,3,b2,5,b3,4,b4,6,b5,12,b6,14,b7,15,b8,16,b9,9,b10,0,"
     "d1,3,d2,4,d3,0,d4,0,d5,0,d6,0,d7,0,d8,0,d9,0,d10,0,"

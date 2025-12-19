@@ -37,7 +37,7 @@ class StokerCloudWriteApi:
             return False
 
     async def _fetch_controller_json(self) -> dict | None:
-        """Отримати JSON з controllerdata2.php."""
+        """Get JSON from controllerdata2.php."""
         url = URL(CONTROLLERDATA_URL).with_query({
             "screen": DEFAULT_SCREEN_QUERY,
             "token": self._entry.data[CONF_TOKEN],
@@ -61,7 +61,7 @@ class StokerCloudWriteApi:
                     return float(str(item.get("value")).replace(",", "."))
         except Exception:
             pass
-        # Фолбек (інколи дорівнює фактичній температурі):
+        # Fallback (sometimes equal to the actual temperature):
         try:
             wc = data.get("weathercomp") or {}
             val = wc.get("zone1-actual", {}).get("val")
@@ -72,7 +72,7 @@ class StokerCloudWriteApi:
         return None
 
     async def async_get_external_temperature_from_controller(self) -> float | None:
-        """weatherdata[id=='7'] → зовнішня температура, °C."""
+        """weatherdata[id=='7'] → outdoor temperature, °C."""
         data = await self._fetch_controller_json()
         if not data:
             return None
@@ -82,7 +82,7 @@ class StokerCloudWriteApi:
                     return float(str(item.get("value")).replace(",", "."))
         except Exception:
             pass
-        # Фолбек: інколи є в weathercomp.zone1-actualref.val
+        # Fallback: sometimes found in weathercomp.zone1-actualref.val
         try:
             wc = data.get("weathercomp") or {}
             val = wc.get("zone1-actualref", {}).get("val")
@@ -146,7 +146,7 @@ class StokerCloudWriteApi:
         if val is not None:
             return val
 
-        # Фолбек: якщо в основному screen не прийшов id=7, тягнемо його окремо
+        # Fallback: if the main screen did not receive id=7, we fetch it separately.
         from yarl import URL
         try:
             url = URL(CONTROLLERDATA_URL).with_query({
@@ -172,7 +172,7 @@ class StokerCloudWriteApi:
             return None
         try:
             running = (data.get("miscdata") or {}).get("running")
-            # приймаємо 1/"1"/True як ON
+            # We treat 1 / "1" / True as ON.
             if running is None:
                 return None
             s = str(running).strip().lower()
@@ -180,7 +180,7 @@ class StokerCloudWriteApi:
                 return True
             if s in ("0", "false", "off", "no"):
                 return False
-            # якщо число/float, трактуємо >0 як True
+            # if it’s a number/float, we treat values > 0 as True
             try:
                 return float(s) > 0
             except Exception:
@@ -241,8 +241,8 @@ class StokerCloudWriteApi:
 
     async def async_get_photo_sensor_lux_from_controller(self) -> float | None:
         """
-        Освітленість (lux) з controllerdata2.php — шукаємо елемент з id="6" і selection="boiler4".
-        Повертає float або None; винятків не підіймає.
+		Illuminance (lux) from controllerdata2.php — we look for an element with id="6" and selection="boiler4".
+		Returns a float or None; does not raise exceptions.
         """
         data = await self._fetch_controller_json()
         if not data:
@@ -282,7 +282,7 @@ class StokerCloudWriteApi:
             val = out2.get("val")
             if val is None:
                 return None
-            # нормалізуємо у верхній регістр
+            # Normalize to uppercase.
             return str(val).upper()
         except Exception:
             return None
@@ -308,17 +308,17 @@ class StokerCloudWriteApi:
             
     async def async_get_hopper_consumption_24h_kg(self) -> float | None:
         """
-        З controllerdata2.php: hopperdata[id='3'] або selection='hopper2' → кг за останні 24 години.
-        Повертає float або None.
+		From controllerdata2.php: hopperdata[id='3'] or selection='hopper2' → kilograms over the last 24 hours.
+		Returns a float or None.
         """
         data = await self._fetch_controller_json()
         if not data:
             return None
 
         hopper = (data.get("hopperdata") or [])
-        # 1) пріоритет за ID
+        #1) priority by ID
         item = next((x for x in hopper if str(x.get("id")) == "3"), None)
-        # 2) запасний варіант — за selection
+        # 2) fallback option — by selection
         if not item:
             item = next((x for x in hopper if str(x.get("selection")) == "hopper2"), None)
         if not item:
@@ -329,13 +329,13 @@ class StokerCloudWriteApi:
             return None
 
         try:
-            # На випадок "8,9"
+            # For the case of "8,9"
             return float(str(raw).replace(",", "."))
         except Exception:
             return None
     async def async_get_hopper_content_kg(self) -> float | None:
         """
-        Читає frontdata → id='hoppercontent' → value (кг) з controllerdata2.php.
+        Reads frontdata → id='hoppercontent' → value (kg) from controllerdata2.php.
         """
         try:
             from yarl import URL
@@ -363,8 +363,8 @@ class StokerCloudWriteApi:
 
     async def async_set_hopper_content_kg(self, value_kg: float) -> None:
         """
-        Оновлює hopper.content через POST form-data на updatevalue.php.
-        Оптимістична модель: не парсимо відповідь і не перевіряємо статус.
+		Updates hopper.content via POST form-data to updatevalue.php.
+		Optimistic model: we do not parse the response and do not check the status.
         """
         token = self._entry.data.get(CONF_TOKEN)
         if not token:

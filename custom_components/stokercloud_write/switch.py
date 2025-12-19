@@ -22,12 +22,12 @@ async def async_setup_entry(
 
 
 class BoilerPowerSwitch(RestoreEntity, SwitchEntity):
-    """Керування котлом через misc.start/misc.stop."""
+    """Boiler control via misc.start / misc.stop."""
 
     _attr_has_entity_name = True
     _attr_name = "Boiler power"
     _attr_icon = "mdi:power"
-    # Переконуємось, що за замовчуванням ентіті НЕ відключається
+    # Ensure that by default the entity is NOT disabled.
     _attr_entity_registry_enabled_default = True
 
     def __init__(self, entry: ConfigEntry, api: StokerCloudWriteApi):
@@ -41,7 +41,7 @@ class BoilerPowerSwitch(RestoreEntity, SwitchEntity):
             name=entry.data.get(CONF_NAME) or f"NBE {self._serial}",
             model="StokerCloud",
         )
-        self._attr_is_on = None  # стане True/False після відновлення або першої дії
+        self._attr_is_on = None  # Will become True/False after restore or the first action.
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -51,7 +51,7 @@ class BoilerPowerSwitch(RestoreEntity, SwitchEntity):
 
     @property
     def available(self) -> bool:
-        # Оптимістичний режим — керування працює без читання стану з хмари
+        # Optimistic mode - control works without reading the state from the cloud.
         return True
 
     async def async_turn_on(self, **kwargs) -> None:

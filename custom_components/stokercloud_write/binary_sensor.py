@@ -37,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class BoilerRunningBinarySensor(CoordinatorEntity[DataUpdateCoordinator[bool | None]], BinarySensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Boiler running"
-    _attr_device_class = BinarySensorDeviceClass.POWER  # або прибери device_class, якщо не хочеш
+    _attr_device_class = BinarySensorDeviceClass.POWER  # or remove device_class if you prefer
     _attr_icon = "mdi:power"
 
     def __init__(self, entry: ConfigEntry, coordinator: DataUpdateCoordinator[bool | None]):
