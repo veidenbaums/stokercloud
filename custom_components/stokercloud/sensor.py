@@ -74,7 +74,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     # --- NEW: Update hopper remaining amount (kg) for the sensor ---
     async def _upd_hopper_content():
         return await api.async_get_hopper_content_kg()
-        
+
+    async def _upd_dhw_difference_under():
+        return await api.async_get_dhw_difference_under_from_controller()
+
     boiler_coord = DataUpdateCoordinator[float | None](
         hass, _LOGGER, name=f"{DOMAIN}_boiler_temp",
         update_method=_upd_boiler,
@@ -156,6 +159,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
     )
 
+    dhw_difference_under_coord = DataUpdateCoordinator[float | None](
+        hass,
+        _LOGGER,
+        name=f"{DOMAIN}_dhw_difference_under_sensor",
+        update_method=_upd_dhw_difference_under,
+        update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
+    )
+
     await boiler_coord.async_config_entry_first_refresh()
     await external_coord.async_config_entry_first_refresh()
     await wanted_boiler_coord.async_config_entry_first_refresh()
@@ -173,7 +184,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     
     # --- NEW: Initial update ---
     await hopper_content_coord.async_config_entry_first_refresh()
-    
+
+    await dhw_difference_under_coord.async_config_entry_first_refresh()
+
     async_add_entities(
         [
             BoilerTemperatureSensor(entry, boiler_coord),
@@ -192,6 +205,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             
             # --- NEW: Add sensor ---
             HopperContentSensor(entry, hopper_content_coord),
+
+            DhwDifferenceUnder(entry, dhw_difference_under_coord),
         ],
         True,
     )
@@ -478,6 +493,35 @@ class HopperContentSensor(CoordinatorEntity[DataUpdateCoordinator[float | None]]
         dev_name = entry.data.get(CONF_NAME) or f"NBE {serial}"
         # We add _sensor to avoid an ID conflict with number.hopper_content.
         self._attr_unique_id = f"{serial}_hopper_content_sensor"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, serial)},
+            manufacturer=ATTR_MANUFACTURER,
+            name=dev_name,
+            model="StokerCloud",
+        )
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.data is not None
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.data
+
+class DhwDifferenceUnder(CoordinatorEntity[DataUpdateCoordinator[float | None]], SensorEntity):
+    _attr_has_entity_name = True
+    _attr_name = "DHW difference under"
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_icon = "mdi:thermometer"
+
+    def __init__(self, entry: ConfigEntry, coordinator: DataUpdateCoordinator[float | None]):
+        super().__init__(coordinator)
+        serial = entry.data.get(CONF_SERIAL, "unknown")
+        dev_name = entry.data.get(CONF_NAME) or f"NBE {serial}"
+        # We add _sensor to avoid an ID conflict with number.hopper_content.
+        self._attr_unique_id = f"{serial}_dhw_difference_under_sensor"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, serial)},
             manufacturer=ATTR_MANUFACTURER,

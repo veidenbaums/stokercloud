@@ -53,10 +53,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     )
     await hopper_content_coord.async_config_entry_first_refresh()
 
+    # --- 3. Coordinator for DHW difference (DHW Difference under) ---
+    async def _upd_dhw_difference_under():
+        return await api.async_get_dhw_difference_under_from_controller()
+
+    dhw_difference_under_coord = DataUpdateCoordinator[float | None](
+        hass,
+        _LOGGER,
+        name=f"{DOMAIN}_dhw_difference_under",
+        update_method=_upd_dhw_difference_under,
+        update_interval=timedelta(seconds=BOILER_SCAN_INTERVAL),
+    )
+    await dhw_difference_under_coord.async_config_entry_first_refresh()
+
     # Add both numbers
     async_add_entities([
         BoilerSetpointNumber(entry, api, boiler_setpoint_coord),
-        HopperContentNumber(entry, api, hopper_content_coord)
+        HopperContentNumber(entry, api, hopper_content_coord),
+        DhwDifferenceUnderNumber(entry, api, dhw_difference_under_coord)
     ], update_before_add=True)
 
 
@@ -152,3 +166,45 @@ class HopperContentNumber(CoordinatorEntity, NumberEntity):
 
         # 2) Send a POST form-data request to the backend
         await self._api.async_set_hopper_content_kg(float(value))
+
+class DhwDifferenceUnderNumber(CoordinatorEntity, NumberEntity):
+    """Specify the temperature difference under the wanted temp when the burner should heat DHW."""
+
+    _attr_has_entity_name = True
+    _attr_name = "DHW difference under"
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_mode = NumberMode.BOX
+    _attr_native_min_value = 5.0
+    _attr_native_max_value = 30.0
+    _attr_native_step = 1.0
+    _attr_icon = "mdi:thermometer"
+
+    def __init__(self, entry: ConfigEntry, api: StokerCloudWriteApi, coordinator: DataUpdateCoordinator[float | None]):
+        super().__init__(coordinator)
+        self._entry = entry
+        self._api = api
+        self._serial = entry.data.get(CONF_SERIAL, "unknown")
+        self._attr_unique_id = f"{self._serial}_dhw_difference_under"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._serial)},
+            manufacturer=ATTR_MANUFACTURER,
+            name=(entry.data.get(CONF_NAME) or f"NBE {self._serial}"),
+            model="StokerCloud",
+        )
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.data is not None
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.data
+
+    async def async_set_native_value(self, value: float) -> None:
+        # 1) Immediately show the new value in the UI (optimistically)
+        self.coordinator.data = float(value)
+        self.async_write_ha_state()
+
+        # 2) Send a POST form-data request to the backend
+        await self._api.async_set_dhw_diff_under_temp(float(value))
+

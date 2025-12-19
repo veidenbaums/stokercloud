@@ -1,5 +1,5 @@
 {
-  "domain": "stokercloud_write",
+  "domain": "stokercloud",
   "name": "StokerCloud Control",
   "version": "1.2.0",
   "documentation": "https://github.com/veidenbaums/stokercloud",
@@ -8,5 +8,5 @@
   "iot_class": "cloud_polling",
   "config_flow": true,
   "requirements": [],
-  "loggers": ["custom_components.stokercloud_write"]
+  "loggers": ["custom_components.stokercloud"]
 }

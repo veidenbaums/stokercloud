@@ -1,4 +1,4 @@
-DOMAIN = "stokercloud_write"
+DOMAIN = "stokercloud"
 
 CONF_TOKEN = "token"
 CONF_SERIAL = "serial"

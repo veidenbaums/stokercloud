@@ -131,6 +131,38 @@ class StokerCloudWriteApi:
             pass
         return None
 
+    async def async_get_dhw_difference_under_from_controller(self) -> float | None:
+        """dhwdata[id=='3'] → °C."""
+        data = await self._fetch_controller_json()
+        if not data:
+            return None
+        try:
+            for item in data.get("dhwdata", []):
+                if str(item.get("id")) == "3":  # lng_dhw_3
+                    return float(str(item.get("value")).replace(",", "."))
+        except Exception:
+            pass
+        return None
+
+    async def async_set_dhw_diff_under_temp(self, value_c: float) -> None:
+        """dhwdata[id=='3'] → °C."""
+
+        token = self._entry.data.get(CONF_TOKEN)
+        if not token:
+            return
+
+        payload = {
+            "menu": "hot_water.diff_under",
+            "name": "hot_water.diff_under",
+            "token": token,
+            "value": f"{float(value_c):.1f}",
+        }
+        try:
+            async with self._session.post(UPDATE_URL, data=payload, timeout=10):
+                pass
+        except Exception:
+            return
+
     async def async_get_shaft_temperature_from_controller(self) -> float | None:
         """boilerdata[id=='7'] (lng_boil_7) → °C."""
         data = await self._fetch_controller_json()
