@@ -76,32 +76,34 @@ Once connected, a device (e.g. **NBE 23862 (My Boiler)**) is created with all se
 
 ### 🧾 Sensors
 
-| Entity | Description |
-|--------|-------------|
-| `sensor.boiler_temperature` | Boiler temperature |
-| `sensor.boiler_temperature_setpoint` | Boiler setpoint |
-| `sensor.external_temperature` | Outside temperature |
-| `sensor.hot_water_temperature` | Current DHW temperature |
-| `sensor.hot_water_wanted_temperature` | Target DHW temperature |
-| `sensor.return_temperature` | Return line temperature |
-| `sensor.shaft_temperature` | Shaft temperature |
-| `sensor.flue_temperature` | Flue gas temperature |
-| `sensor.oxygen` | O₂ level (%) |
-| `sensor.power_percent` | Boiler power (%) |
-| `sensor.power_kw` | Boiler power (kW) |
-| `sensor.pellet_consumption_last_24h` | Pellet usage (last 24h) |
-| `sensor.photo_sensor` | Photodiode reading |
-| `sensor.state` | Operational status |
-| `sensor.pump_state` | Circulation pump status |
-| `sensor.hopper_content` | Hopper content (kg) |
+| Entity                                | Description                      |
+|---------------------------------------|----------------------------------|
+| `sensor.boiler_temperature`           | Boiler temperature               |
+| `sensor.boiler_temperature_setpoint`  | Boiler setpoint                  |
+| `sensor.external_temperature`         | Outside temperature              |
+| `sensor.hot_water_temperature`        | Current DHW temperature          |
+| `sensor.hot_water_wanted_temperature` | Target DHW temperature           |
+| `sensor.return_temperature`           | Return line temperature          |
+| `sensor.shaft_temperature`            | Shaft temperature                |
+| `sensor.flue_temperature`             | Flue gas temperature             |
+| `sensor.oxygen`                       | O₂ level (%)                     |
+| `sensor.power_percent`                | Boiler power (%)                 |
+| `sensor.power_kw`                     | Boiler power (kW)                |
+| `sensor.pellet_consumption_last_24h`  | Pellet usage (last 24h)          |
+| `sensor.photo_sensor`                 | Photodiode reading               |
+| `sensor.state`                        | Operational status               |
+| `sensor.pump_state`                   | Circulation pump status          |
+| `sensor.hopper_content`               | Hopper content (kg)              |
+| `sensor.dhw_difference_under`         | DHW difference under temperature |
 
 ### 🎛️ Controls
 
-| Entity | Type | Description |
-|--------|------|-------------|
-| `switch.boiler_power` | Switch | Turn boiler on/off |
-| `number.boiler_temperature` | Number | Adjust boiler setpoint |
-| `number.hopper_content` | Number | Manually update hopper pellet weight |
+| Entity                        | Type | Description                             |
+|-------------------------------|------|-----------------------------------------|
+| `switch.boiler_power`         | Switch | Turn boiler on/off                      |
+| `number.boiler_temperature`   | Number | Adjust boiler setpoint                  |
+| `number.hopper_content`       | Number | Manually update hopper pellet weight    |
+| `number.dhw_difference_under` | Number | Adjust DHW difference under temperature |
 
 
 ## 👨‍💻 Author
