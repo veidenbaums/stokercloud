@@ -23,7 +23,7 @@ It extends the original [homeassistant-stokercloud](https://github.com/KristianO
 1. Open **HACS → Integrations → ⋯ → Custom repositories**
 2. Add repository URL:
    ```
-   https://github.com/chaichuk/stokercloud_write
+   https://github.com/veidenbaums/stokercloud
    ```
    Category: **Integration**
 3. Install and **Restart Home Assistant**
@@ -106,8 +106,7 @@ Once connected, a device (e.g. **NBE 23862 (My Boiler)**) is created with all se
 
 ## 👨‍💻 Author
 
-- GitHub: [@chaichuk](https://github.com/chaichuk)  
-- Telegram: [@serhii_chaichuk](https://t.me/serhii_chaichuk)
+- GitHub: [@veidenbaums](https://github.com/veidenbaums)  
 
 Custom integration for **NBE / StokerCloud** pellet boilers with full control from Home Assistant.
 
